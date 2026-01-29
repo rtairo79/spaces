@@ -1,0 +1,317 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum UserRole {
+  ADMIN
+  STAFF
+  PATRON
+}
+
+enum ReservationStatus {
+  PENDING
+  APPROVED
+  DECLINED
+  CANCELLED
+}
+
+enum ApprovalMode {
+  AUTO_APPROVE
+  MANUAL_REVIEW
+}
+
+enum AvailabilityStatus {
+  AVAILABLE
+  UNAVAILABLE
+  IN_MAINTENANCE
+}
+
+enum CheckInStatus {
+  NOT_CHECKED_IN
+  CHECKED_IN
+  NO_SHOW
+  AUTO_RELEASED
+}
+
+model User {
+  id            String    @id @default(cuid())
+  email         String    @unique
+  name          String
+  password      String
+  role          UserRole  @default(PATRON)
+  locationId    String?
+  location      Location? @relation(fields: [locationId], references: [id])
+  phone         String?
+  libraryCardId String?
+  active        Boolean   @default(true)
+
+  createdReservations Reservation[] @relation("CreatedBy")
+  checkedInReservations Reservation[] @relation("CheckedInBy")
+  sentMessages        Message[]     @relation("SentBy")
+
+  createdAt           DateTime      @default(now())
+  updatedAt           DateTime      @updatedAt
+
+  @@index([email])
+  @@index([role])
+}
+
+model Location {
+  id          String        @id @default(cuid())
+  name        String
+  address     String
+  phone       String?
+  email       String?
+  active      Boolean       @default(true)
+  
+  rooms       Room[]
+  users       User[]
+  reservations Reservation[]
+  
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+  
+  @@index([active])
+}
+
+model RoomType {
+  id          String   @id @default(cuid())
+  name        String
+  description String?
+  
+  rooms       Room[]
+  
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+model Equipment {
+  id          String   @id @default(cuid())
+  name        String
+  description String?
+  quantity    Int      @default(1)
+  active      Boolean  @default(true)
+  
+  rooms       RoomEquipment[]
+  
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  
+  @@index([active])
+}
+
+model Room {
+  id               String           @id @default(cuid())
+  name             String
+  locationId       String
+  location         Location         @relation(fields: [locationId], references: [id], onDelete: Cascade)
+  roomTypeId       String
+  roomType         RoomType         @relation(fields: [roomTypeId], references: [id])
+  capacity         Int
+  availabilityStatus AvailabilityStatus @default(AVAILABLE) // Added availabilityStatus
+  description      String?
+  imageUrl         String?          // Room image
+  termsAndConditions String?        @db.Text // Terms document content or URL
+  active           Boolean          @default(true)
+  approvalMode     ApprovalMode     @default(MANUAL_REVIEW)
+
+  timeSlots        TimeSlot[]
+  reservations     Reservation[]
+  equipment        RoomEquipment[]
+  bookingRule      BookingRule?
+
+  createdAt        DateTime         @default(now())
+  updatedAt        DateTime         @updatedAt
+
+  @@index([locationId])
+  @@index([roomTypeId])
+  @@index([active])
+}
+
+model RoomEquipment {
+  id         String    @id @default(cuid())
+  roomId     String
+  room       Room      @relation(fields: [roomId], references: [id], onDelete: Cascade)
+  equipmentId String
+  equipment  Equipment @relation(fields: [equipmentId], references: [id], onDelete: Cascade)
+  quantity   Int       @default(1)
+  
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
+  
+  @@unique([roomId, equipmentId])
+  @@index([roomId])
+  @@index([equipmentId])
+}
+
+model TimeSlot {
+  id          String   @id @default(cuid())
+  roomId      String
+  room        Room     @relation(fields: [roomId], references: [id], onDelete: Cascade)
+  dayOfWeek   Int      // 0-6 (Sunday-Saturday)
+  startTime   String   // HH:mm format
+  endTime     String   // HH:mm format
+  
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  
+  @@index([roomId])
+}
+
+model ProgramType {
+  id          String        @id @default(cuid())
+  name        String
+  description String?
+  active      Boolean       @default(true)
+  
+  reservations Reservation[]
+  
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+}
+
+model Reservation {
+  id                String            @id @default(cuid())
+  roomId            String
+  room              Room              @relation(fields: [roomId], references: [id])
+  locationId        String
+  location          Location          @relation(fields: [locationId], references: [id])
+  programTypeId     String
+  programType       ProgramType       @relation(fields: [programTypeId], references: [id])
+
+  date              DateTime
+  startTime         String            // HH:mm format
+  endTime           String            // HH:mm format
+
+  status            ReservationStatus @default(PENDING)
+
+  // Check-in tracking
+  checkInStatus     CheckInStatus     @default(NOT_CHECKED_IN)
+  checkedInAt       DateTime?
+  checkedInById     String?
+  checkedInBy       User?             @relation("CheckedInBy", fields: [checkedInById], references: [id])
+  releasedAt        DateTime?
+
+  // Walk-in tracking
+  isWalkIn          Boolean           @default(false)
+  originalReservationId String?
+  originalReservation   Reservation?  @relation("WalkInReplacement", fields: [originalReservationId], references: [id])
+  walkInReplacements    Reservation[] @relation("WalkInReplacement")
+
+  requesterName     String
+  requesterEmail    String
+  requesterPhone    String
+  libraryCardId     String?
+  organizationName  String?
+  notes             String?
+
+  termsAccepted     Boolean           @default(false)
+  termsAcceptedAt   DateTime?
+
+  createdById       String
+  createdBy         User              @relation("CreatedBy", fields: [createdById], references: [id])
+
+  approvedAt        DateTime?
+  declinedAt        DateTime?
+  cancelledAt       DateTime?
+
+  messages          Message[]
+  reminderLogs      ReminderLog[]
+
+  createdAt         DateTime          @default(now())
+  updatedAt         DateTime          @updatedAt
+
+  @@index([roomId])
+  @@index([locationId])
+  @@index([date])
+  @@index([status])
+  @@index([createdById])
+  @@index([checkInStatus])
+}
+
+model Message {
+  id             String       @id @default(cuid())
+  reservationId  String
+  reservation    Reservation  @relation(fields: [reservationId], references: [id], onDelete: Cascade)
+  
+  sentById       String
+  sentBy         User         @relation("SentBy", fields: [sentById], references: [id])
+  
+  recipientEmail String
+  subject        String
+  body           String       @db.Text
+  
+  sentAt         DateTime     @default(now())
+  
+  @@index([reservationId])
+  @@index([sentById])
+}
+
+model EmailTemplate {
+  id          String   @id @default(cuid())
+  key         String   @unique // e.g., "reservation_confirmation", "reservation_approved", etc.
+  name        String
+  subject     String
+  body        String   @db.Text
+  active      Boolean  @default(true)
+  
+  // Available variables: {{name}}, {{room}}, {{date}}, {{time}}, {{location}}
+  
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  
+  @@index([key])
+  @@index([active])
+}
+
+model Settings {
+  id                  String   @id @default(cuid())
+  key                 String   @unique
+  value               String   @db.Text
+
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+}
+
+model ReminderLog {
+  id            String       @id @default(cuid())
+  reservationId String
+  reservation   Reservation  @relation(fields: [reservationId], references: [id], onDelete: Cascade)
+  reminderType  String       // "24h" | "1h"
+  sentAt        DateTime     @default(now())
+  status        String       @default("SENT")
+
+  @@index([reservationId])
+}
+
+model UsageAnalytics {
+  id               String   @id @default(cuid())
+  roomId           String
+  date             DateTime @db.Date
+  hour             Int
+  dayOfWeek        Int
+  reservationCount Int      @default(0)
+  checkInCount     Int      @default(0)
+  noShowCount      Int      @default(0)
+  walkInCount      Int      @default(0)
+  utilizationMins  Int      @default(0)
+
+  @@unique([roomId, date, hour])
+  @@index([roomId, dayOfWeek, hour])
+}
+
+model BookingRule {
+  id                  String  @id @default(cuid())
+  roomId              String  @unique
+  room                Room    @relation(fields: [roomId], references: [id], onDelete: Cascade)
+  gracePeriodMinutes  Int     @default(15)
+  maxDurationMinutes  Int     @default(120)
+  maxAdvanceDays      Int     @default(30)
+
+  @@index([roomId])
+}
