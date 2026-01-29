@@ -120,9 +120,18 @@ export async function sendRoomReleasedNotification(
   await transporter.sendMail(mailOptions);
 }
 
+// Simplified type for reminder emails
+interface ReminderReservation {
+  room: { name: string };
+  location: { name: string };
+  date: Date;
+  startTime: string;
+  endTime: string;
+}
+
 export async function sendReservationReminder(
   to: string,
-  reservation: ReservationWithRelations,
+  reservation: ReminderReservation,
   reminderType: '24h' | '1h'
 ): Promise<void> {
   const timeLabel = reminderType === '24h' ? '24 hours' : '1 hour';

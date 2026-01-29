@@ -94,10 +94,11 @@ async function sendReminderAndLog(
     await sendReservationReminder(
       reservation.requesterEmail,
       {
-        ...reservation,
-        room: reservation.room as Parameters<typeof sendReservationReminder>[1]['room'],
-        location: reservation.location as Parameters<typeof sendReservationReminder>[1]['location'],
-        programType: reservation.programType as Parameters<typeof sendReservationReminder>[1]['programType'],
+        room: { name: reservation.room.name },
+        location: { name: reservation.location.name },
+        date: reservation.date,
+        startTime: reservation.startTime,
+        endTime: reservation.endTime,
       },
       reminderType
     );
